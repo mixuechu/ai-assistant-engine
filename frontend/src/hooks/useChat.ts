@@ -65,6 +65,7 @@ export function useChat({ config, sessionId, onSessionCreated }: UseChatOptions)
 
       const decoder = new TextDecoder()
       let buffer = ''
+      let currentEvent = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -76,46 +77,55 @@ export function useChat({ config, sessionId, onSessionCreated }: UseChatOptions)
 
         for (const line of lines) {
           if (line.startsWith('event: ')) {
-            const eventType = line.slice(7).trim()
+            currentEvent = line.slice(7).trim()
             continue
           }
-          if (!line.startsWith('data: ')) continue
 
-          const data = line.slice(6)
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
 
-          // Parse the event type from the preceding event line
-          // SSE format: event: xxx\ndata: yyy
-          const eventMatch = lines.find(l =>
-            l.startsWith('event: ') && lines.indexOf(l) < lines.indexOf(line)
-          )
-
-          // We handle events by checking buffer context
-          if (data === '') continue
-
-          try {
-            // Try to parse as JSON first (for session, tool_call events)
-            const parsed = JSON.parse(data)
-            if (parsed.session_id && !sessionId) {
-              onSessionCreated?.(parsed.session_id)
-            }
-          } catch {
-            // Plain text — streaming content
-            setMessages(prev => {
-              const updated = [...prev]
-              const last = updated[updated.length - 1]
-              if (last && last.role === 'assistant' && last.isStreaming) {
-                updated[updated.length - 1] = {
-                  ...last,
-                  content: last.content + data,
+            if (currentEvent === 'session') {
+              try {
+                const parsed = JSON.parse(data)
+                if (parsed.session_id) {
+                  onSessionCreated?.(parsed.session_id)
                 }
-              }
-              return updated
-            })
+              } catch { /* ignore */ }
+            } else if (currentEvent === 'text') {
+              setMessages(prev => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last && last.role === 'assistant' && last.isStreaming) {
+                  updated[updated.length - 1] = {
+                    ...last,
+                    content: last.content + data,
+                  }
+                }
+                return updated
+              })
+            } else if (currentEvent === 'done') {
+              // stream complete
+            } else if (currentEvent === 'error') {
+              setMessages(prev => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last && last.isStreaming) {
+                  updated[updated.length - 1] = {
+                    ...last,
+                    content: `Error: ${data}`,
+                    isStreaming: false,
+                  }
+                }
+                return updated
+              })
+            }
+
+            currentEvent = ''
+            continue
           }
         }
       }
 
-      // Mark streaming as complete
       setMessages(prev => {
         const updated = [...prev]
         const last = updated[updated.length - 1]

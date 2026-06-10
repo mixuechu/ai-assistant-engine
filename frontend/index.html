@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Assistant Engine — Dev</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: 'Outfit', -apple-system, sans-serif;
+        background: #0A1929;
+        color: #E8E8E8;
+        min-height: 100vh;
+      }
+      .dev-header {
+        padding: 40px;
+        text-align: center;
+      }
+      .dev-header h1 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #D4AF37;
+        margin-bottom: 8px;
+      }
+      .dev-header p {
+        font-size: 14px;
+        color: #A0AEC0;
+      }
+      .dev-hint {
+        position: fixed;
+        bottom: 90px;
+        right: 24px;
+        background: rgba(26, 35, 50, 0.9);
+        border: 1px solid #2D3748;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 13px;
+        color: #A0AEC0;
+        pointer-events: none;
+        animation: fadeIn 1s ease 2s both;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/dev.tsx"></script>
+  </body>
+</html>

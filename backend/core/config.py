@@ -4,9 +4,11 @@ from typing import Optional
 
 class EngineSettings(BaseSettings):
     # LLM
-    LLM_PROVIDER: str = "claude"
+    LLM_PROVIDER: str = "claude"  # claude | claude-vertex | openai | deepseek
     ANTHROPIC_API_KEY: Optional[str] = None
-    CLAUDE_MODEL: str = "claude-sonnet-4-20250514"
+    CLAUDE_MODEL: str = "claude-sonnet-4-6"
+    VERTEX_PROJECT_ID: Optional[str] = None
+    VERTEX_REGION: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"
     OPENAI_BASE_URL: Optional[str] = None

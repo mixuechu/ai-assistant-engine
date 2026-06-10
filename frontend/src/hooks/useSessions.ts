@@ -11,7 +11,7 @@ export function useSessions(config: AiAssistantConfig) {
     return localStorage.getItem('access_token')
   }, [config])
 
-  const headers = useCallback(() => {
+  const headers = useCallback((): Record<string, string> => {
     const token = getAuthToken()
     return token ? { Authorization: `Bearer ${token}` } : {}
   }, [getAuthToken])

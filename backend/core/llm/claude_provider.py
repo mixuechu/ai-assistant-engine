@@ -7,8 +7,26 @@ from .provider import LLMProvider, LLMResponse, Message, StreamChunk, ToolDefini
 
 class ClaudeProvider(LLMProvider):
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
-        self.client = anthropic.AsyncAnthropic(api_key=api_key)
+    def __init__(
+        self,
+        model: str = "claude-sonnet-4-6",
+        *,
+        api_key: Optional[str] = None,
+        vertex_project_id: Optional[str] = None,
+        vertex_region: Optional[str] = None,
+    ):
+        if vertex_project_id:
+            from anthropic import AsyncAnthropicVertex
+            self.client = AsyncAnthropicVertex(
+                project_id=vertex_project_id,
+                region=vertex_region or "us-east5",
+            )
+        elif api_key:
+            self.client = anthropic.AsyncAnthropic(api_key=api_key)
+        else:
+            raise ValueError(
+                "ClaudeProvider requires either api_key or vertex_project_id"
+            )
         self.model = model
 
     def _convert_messages(

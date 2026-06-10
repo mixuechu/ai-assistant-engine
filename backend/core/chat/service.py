@@ -97,7 +97,6 @@ class ChatService:
     ) -> ChatMessage:
         session.message_count = (session.message_count or 0) + 1
         msg = ChatMessage(
-            session_id=session.id,
             seq=session.message_count,
             role=role,
             content=content,
@@ -105,7 +104,7 @@ class ChatService:
             tool_call_id=tool_call_id,
             token_count=self.llm.count_tokens(content),
         )
-        db.add(msg)
+        session.messages.append(msg)
         return msg
 
     async def _auto_title(self, db: AsyncSession, session: ChatSession, user_message: str):

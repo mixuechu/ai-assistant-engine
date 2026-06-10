@@ -4,9 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from typing import Optional
+
 from ..adapters.base import UserInfo
 from ..core.chat.service import ChatService
-from .deps import get_chat_service, get_current_user, get_db
+from ..core.tools import ToolRegistry
+from .deps import get_adapter, get_chat_service, get_current_user, get_db, get_tool_registry
 from .schemas import ChatRequest, MessageResponse, RenameRequest, SessionResponse
 
 router = APIRouter(tags=["ai-assistant"])
@@ -18,7 +21,9 @@ async def chat(
     user: UserInfo = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     chat_service: ChatService = Depends(get_chat_service),
+    tool_registry: Optional[ToolRegistry] = Depends(get_tool_registry),
 ):
+    adapter = get_adapter()
     session_id = req.session_id
     if not session_id:
         session = await chat_service.create_session(db, user.id)
@@ -33,6 +38,8 @@ async def chat(
             session_id=session_id,
             user_id=user.id,
             user_message=req.message,
+            system_prompt=adapter.system_prompt,
+            tool_registry=tool_registry,
         ):
             if chunk.type == "text":
                 yield {"event": "text", "data": chunk.content}
@@ -40,6 +47,25 @@ async def chat(
                 yield {
                     "event": "tool_call",
                     "data": json.dumps(chunk.tool_call, ensure_ascii=False),
+                }
+            elif chunk.type == "tool_executing":
+                yield {
+                    "event": "tool_executing",
+                    "data": json.dumps(
+                        {"name": chunk.content, "id": chunk.tool_call["id"] if chunk.tool_call else None},
+                        ensure_ascii=False,
+                    ),
+                }
+            elif chunk.type == "tool_result":
+                preview = chunk.content[:200] if chunk.content else ""
+                yield {
+                    "event": "tool_result",
+                    "data": json.dumps(
+                        {"name": chunk.tool_call["name"] if chunk.tool_call else "",
+                         "id": chunk.tool_call["id"] if chunk.tool_call else "",
+                         "preview": preview},
+                        ensure_ascii=False,
+                    ),
                 }
             elif chunk.type == "error":
                 yield {"event": "error", "data": chunk.content}

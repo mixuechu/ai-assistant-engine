@@ -1,10 +1,25 @@
 import React, { useEffect, useRef } from 'react'
-import type { ChatMessage } from '../types'
+import type { ChatMessage, ToolStatus } from '../types'
 
 interface MessageListProps {
   messages: ChatMessage[]
   welcomeMessage?: string
 }
+
+const ToolStatusIndicator: React.FC<{ statuses: ToolStatus[] }> = ({ statuses }) => (
+  <div className="ai-tool-statuses">
+    {statuses.map((ts, i) => (
+      <div key={i} className={`ai-tool-status ai-tool-status-${ts.status}`}>
+        <span className="ai-tool-status-icon">
+          {ts.status === 'executing' ? '⟳' : '✓'}
+        </span>
+        <span className="ai-tool-status-text">
+          {ts.status === 'executing' ? `正在查询 ${ts.name}...` : `${ts.name} 完成`}
+        </span>
+      </div>
+    ))}
+  </div>
+)
 
 export const MessageList: React.FC<MessageListProps> = ({
   messages,
@@ -34,7 +49,10 @@ export const MessageList: React.FC<MessageListProps> = ({
             key={msg.id}
             className={`ai-message ai-message-${msg.role} ${msg.isStreaming ? 'ai-streaming' : ''}`}
           >
-            <div className="ai-message-bubble">{msg.content}</div>
+            {msg.toolStatuses && msg.toolStatuses.length > 0 && (
+              <ToolStatusIndicator statuses={msg.toolStatuses} />
+            )}
+            {msg.content && <div className="ai-message-bubble">{msg.content}</div>}
           </div>
         ))}
       <div ref={endRef} />

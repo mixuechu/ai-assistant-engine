@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from ..config import EngineSettings
 from ..llm.provider import LLMProvider, Message, StreamChunk, ToolDefinition
+from ..tools import ToolRegistry
 from .compression import compress_history
 from .models import ChatMessage, ChatSession
 
@@ -123,6 +124,7 @@ class ChatService:
         user_message: str,
         system_prompt: Optional[str] = None,
         tools: Optional[list[ToolDefinition]] = None,
+        tool_registry: Optional[ToolRegistry] = None,
     ) -> AsyncGenerator[StreamChunk, None]:
         session = await self.get_session(db, session_id, user_id)
         if not session:
@@ -132,27 +134,60 @@ class ChatService:
         await self._add_message(db, session, "user", user_message)
         await self._auto_title(db, session, user_message)
 
-        messages = self._build_messages(session, system_prompt)
+        tool_defs = tools
+        if not tool_defs and tool_registry:
+            tool_defs = tool_registry.get_definitions()
 
-        if len(messages) > self.settings.CONTEXT_WINDOW_SIZE:
-            messages = await compress_history(
-                messages, self.llm, keep_recent=self.settings.CONTEXT_WINDOW_SIZE
+        max_rounds = 5
+        for _round in range(max_rounds):
+            messages = self._build_messages(session, system_prompt)
+
+            if len(messages) > self.settings.CONTEXT_WINDOW_SIZE:
+                messages = await compress_history(
+                    messages, self.llm, keep_recent=self.settings.CONTEXT_WINDOW_SIZE
+                )
+
+            full_content = ""
+            all_tool_calls: list[dict] = []
+
+            async for chunk in self.llm.generate_stream(
+                messages=messages, tools=tool_defs
+            ):
+                if chunk.type == "text":
+                    full_content += chunk.content
+                    yield chunk
+                elif chunk.type == "tool_call" and chunk.tool_call:
+                    all_tool_calls.append(chunk.tool_call)
+                    yield chunk
+
+            await self._add_message(
+                db, session, "assistant", full_content,
+                tool_calls=all_tool_calls or None,
             )
 
-        full_content = ""
-        all_tool_calls: list[dict] = []
+            if not all_tool_calls or not tool_registry:
+                break
 
-        async for chunk in self.llm.generate_stream(
-            messages=messages, tools=tools
-        ):
-            if chunk.type == "text":
-                full_content += chunk.content
-            elif chunk.type == "tool_call" and chunk.tool_call:
-                all_tool_calls.append(chunk.tool_call)
-            yield chunk
+            for tc in all_tool_calls:
+                yield StreamChunk(
+                    type="tool_executing",
+                    content=tc["name"],
+                    tool_call=tc,
+                )
+                result = await tool_registry.execute(
+                    tc["name"], tc.get("arguments", {})
+                )
+                result_content = result.to_content_string()
 
-        await self._add_message(
-            db, session, "assistant", full_content,
-            tool_calls=all_tool_calls or None,
-        )
+                await self._add_message(
+                    db, session, "tool", result_content,
+                    tool_call_id=tc["id"],
+                )
+                yield StreamChunk(
+                    type="tool_result",
+                    content=result_content,
+                    tool_call={"id": tc["id"], "name": tc["name"]},
+                )
+
+        yield StreamChunk(type="done")
         await db.flush()

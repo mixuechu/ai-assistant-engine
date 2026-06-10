@@ -1,3 +1,8 @@
+export interface ToolStatus {
+  name: string
+  status: 'executing' | 'done'
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -5,6 +10,7 @@ export interface ChatMessage {
   tool_calls_json?: string | null
   created_at: string
   isStreaming?: boolean
+  toolStatuses?: ToolStatus[]
 }
 
 export interface ChatSession {

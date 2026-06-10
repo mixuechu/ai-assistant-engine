@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import type { ChatMessage, AiAssistantConfig } from '../types'
+import type { ChatMessage, AiAssistantConfig, ToolStatus } from '../types'
 
 interface UseChatOptions {
   config: AiAssistantConfig
@@ -103,6 +103,35 @@ export function useChat({ config, sessionId, onSessionCreated }: UseChatOptions)
                 }
                 return updated
               })
+            } else if (currentEvent === 'tool_executing') {
+              try {
+                const parsed = JSON.parse(data)
+                const toolStatus: ToolStatus = { name: parsed.name || 'tool', status: 'executing' }
+                setMessages(prev => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last && last.role === 'assistant' && last.isStreaming) {
+                    const statuses = [...(last.toolStatuses || []), toolStatus]
+                    updated[updated.length - 1] = { ...last, toolStatuses: statuses }
+                  }
+                  return updated
+                })
+              } catch { /* ignore */ }
+            } else if (currentEvent === 'tool_result') {
+              try {
+                const parsed = JSON.parse(data)
+                setMessages(prev => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last && last.role === 'assistant' && last.isStreaming && last.toolStatuses) {
+                    const statuses = last.toolStatuses.map(ts =>
+                      ts.name === (parsed.name || '') ? { ...ts, status: 'done' as const } : ts
+                    )
+                    updated[updated.length - 1] = { ...last, toolStatuses: statuses, content: '' }
+                  }
+                  return updated
+                })
+              } catch { /* ignore */ }
             } else if (currentEvent === 'done') {
               // stream complete
             } else if (currentEvent === 'error') {

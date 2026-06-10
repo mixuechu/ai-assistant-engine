@@ -374,3 +374,35 @@
 .ai-session-item-delete:hover {
   color: #EF4444;
 }
+
+/* Tool status indicators */
+.ai-tool-statuses {
+  margin-bottom: 8px;
+}
+
+.ai-tool-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ai-text-secondary);
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+}
+
+.ai-tool-status-executing .ai-tool-status-icon {
+  animation: ai-spin 1s linear infinite;
+  color: var(--ai-accent);
+}
+
+.ai-tool-status-done .ai-tool-status-icon {
+  color: #34D399;
+}
+
+@keyframes ai-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

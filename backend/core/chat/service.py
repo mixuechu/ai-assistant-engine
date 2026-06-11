@@ -138,8 +138,7 @@ class ChatService:
         if not tool_defs and tool_registry:
             tool_defs = tool_registry.get_definitions()
 
-        max_rounds = 5
-        for _round in range(max_rounds):
+        for _round in range(100):
             messages = self._build_messages(session, system_prompt)
 
             if len(messages) > self.settings.CONTEXT_WINDOW_SIZE:

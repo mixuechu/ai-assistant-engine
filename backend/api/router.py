@@ -57,7 +57,7 @@ async def chat(
                     ),
                 }
             elif chunk.type == "tool_result":
-                preview = chunk.content[:200] if chunk.content else ""
+                preview = chunk.content[:5000] if chunk.content else ""
                 yield {
                     "event": "tool_result",
                     "data": json.dumps(

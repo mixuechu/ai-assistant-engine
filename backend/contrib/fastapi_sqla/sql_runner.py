@@ -5,7 +5,7 @@ from sqlalchemy import text
 from ...core.nl2sql import SqlRunner
 
 
-class XingERPSqlRunner(SqlRunner):
+class SQLAlchemySqlRunner(SqlRunner):
 
     def __init__(self, session_factory):
         self._sf = session_factory

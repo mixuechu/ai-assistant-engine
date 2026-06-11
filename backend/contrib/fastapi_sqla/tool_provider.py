@@ -1,7 +1,7 @@
-from ..base import ToolProvider
+from ...adapters.base import ToolProvider
 
 
-class XingERPToolProvider(ToolProvider):
+class SimpleToolProvider(ToolProvider):
 
     def __init__(self):
         self._tools = []

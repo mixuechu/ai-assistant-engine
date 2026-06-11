@@ -2,17 +2,10 @@ from typing import Callable, Optional
 
 from jose import jwt, JWTError
 
-from ..base import AuthAdapter, UserInfo
+from ...adapters.base import AuthAdapter, UserInfo
 
 
-class XingERPAuthAdapter(AuthAdapter):
-    """Validates JWTs issued by the XingERP backend.
-
-    Two modes:
-    1. Standalone: decode JWT with shared secret, returns minimal UserInfo (id only).
-    2. Embedded: host provides a user_loader callback that queries the ERP DB
-       for full user info (username, permissions, etc.).
-    """
+class JWTAuthAdapter(AuthAdapter):
 
     def __init__(
         self,
@@ -32,7 +25,7 @@ class XingERPAuthAdapter(AuthAdapter):
         except JWTError:
             return None
 
-        if payload.get("type") != "access":
+        if payload.get("type") and payload.get("type") != "access":
             return None
 
         user_id = payload.get("sub")

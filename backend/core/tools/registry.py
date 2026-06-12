@@ -1,7 +1,10 @@
+import logging
 from typing import Optional
 
 from .base import BaseTool, ToolResult
 from ..llm.provider import ToolDefinition
+
+logger = logging.getLogger("ai.tools")
 
 
 class ToolRegistry:
@@ -25,8 +28,10 @@ class ToolRegistry:
     async def execute(self, name: str, arguments: dict) -> ToolResult:
         tool = self._tools.get(name)
         if not tool:
+            logger.warning("unknown tool requested: %s", name)
             return ToolResult(success=False, error=f"Unknown tool: {name}")
         try:
             return await tool.execute(**arguments)
         except Exception as e:
+            logger.exception("tool %s raised exception", name)
             return ToolResult(success=False, error=str(e))

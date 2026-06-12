@@ -1,4 +1,6 @@
 import json
+import logging
+import time
 from typing import AsyncGenerator, Optional
 
 from sqlalchemy import select, func
@@ -10,6 +12,8 @@ from ..llm.provider import LLMProvider, Message, StreamChunk, ToolDefinition
 from ..tools import ToolRegistry
 from .compression import compress_history
 from .models import ChatMessage, ChatSession
+
+logger = logging.getLogger("ai.chat")
 
 
 class ChatService:
@@ -128,9 +132,14 @@ class ChatService:
     ) -> AsyncGenerator[StreamChunk, None]:
         session = await self.get_session(db, session_id, user_id)
         if not session:
+            logger.warning("session not found: %s user=%s", session_id, user_id)
             yield StreamChunk(type="error", content="Session not found")
             return
 
+        logger.info(
+            "chat start session=%s user=%s msg=%s",
+            session_id, user_id, user_message[:80],
+        )
         await self._add_message(db, session, "user", user_message)
         await self._auto_title(db, session, user_message)
 
@@ -138,8 +147,14 @@ class ChatService:
         if not tool_defs and tool_registry:
             tool_defs = tool_registry.get_definitions()
 
-        for _round in range(100):
+        t_start = time.monotonic()
+        round_num = 0
+        total_tool_calls = 0
+
+        while True:
+            round_num += 1
             messages = self._build_messages(session, system_prompt)
+            logger.info("round %d  messages=%d  session=%s", round_num, len(messages), session_id)
 
             if len(messages) > self.settings.CONTEXT_WINDOW_SIZE:
                 messages = await compress_history(
@@ -149,15 +164,20 @@ class ChatService:
             full_content = ""
             all_tool_calls: list[dict] = []
 
-            async for chunk in self.llm.generate_stream(
-                messages=messages, tools=tool_defs
-            ):
-                if chunk.type == "text":
-                    full_content += chunk.content
-                    yield chunk
-                elif chunk.type == "tool_call" and chunk.tool_call:
-                    all_tool_calls.append(chunk.tool_call)
-                    yield chunk
+            try:
+                async for chunk in self.llm.generate_stream(
+                    messages=messages, tools=tool_defs
+                ):
+                    if chunk.type == "text":
+                        full_content += chunk.content
+                        yield chunk
+                    elif chunk.type == "tool_call" and chunk.tool_call:
+                        all_tool_calls.append(chunk.tool_call)
+                        yield chunk
+            except Exception:
+                logger.exception("LLM stream error session=%s round=%d", session_id, round_num)
+                yield StreamChunk(type="error", content="LLM streaming failed")
+                return
 
             await self._add_message(
                 db, session, "assistant", full_content,
@@ -167,16 +187,23 @@ class ChatService:
             if not all_tool_calls or not tool_registry:
                 break
 
+            total_tool_calls += len(all_tool_calls)
             for tc in all_tool_calls:
+                logger.info("tool call: %s  args=%s  session=%s", tc["name"], str(tc.get("arguments", {}))[:120], session_id)
                 yield StreamChunk(
                     type="tool_executing",
                     content=tc["name"],
                     tool_call=tc,
                 )
+                t_tool = time.monotonic()
                 result = await tool_registry.execute(
                     tc["name"], tc.get("arguments", {})
                 )
                 result_content = result.to_content_string()
+                logger.info(
+                    "tool result: %s  ok=%s  %.1fs  session=%s",
+                    tc["name"], result.success, time.monotonic() - t_tool, session_id,
+                )
 
                 await self._add_message(
                     db, session, "tool", result_content,
@@ -188,5 +215,10 @@ class ChatService:
                     tool_call={"id": tc["id"], "name": tc["name"]},
                 )
 
+        elapsed = time.monotonic() - t_start
+        logger.info(
+            "chat done session=%s rounds=%d tools=%d %.1fs",
+            session_id, round_num, total_tool_calls, elapsed,
+        )
         yield StreamChunk(type="done")
         await db.flush()

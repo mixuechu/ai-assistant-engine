@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,7 @@ from ..core.tools import ToolRegistry
 from .deps import get_adapter, get_chat_service, get_current_user, get_db, get_tool_registry
 from .schemas import ChatRequest, MessageResponse, RenameRequest, SessionResponse
 
+logger = logging.getLogger("ai.api")
 router = APIRouter(tags=["ai-assistant"])
 
 
@@ -29,6 +31,8 @@ async def chat(
         session = await chat_service.create_session(db, user.id)
         session_id = session.id
         await db.flush()
+
+    logger.info("chat request user=%s session=%s", user.id, session_id)
 
     async def event_generator():
         yield {"event": "session", "data": json.dumps({"session_id": session_id})}

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter
 
 from .adapters.base import AssistantAdapter
@@ -16,6 +18,8 @@ async def create_assistant_app(
 ) -> APIRouter:
     if settings is None:
         settings = EngineSettings()
+
+    logging.getLogger("ai").setLevel(logging.INFO)
 
     init_database(settings.DATABASE_URL)
     await create_tables()

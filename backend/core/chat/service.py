@@ -142,6 +142,7 @@ class ChatService:
         )
         await self._add_message(db, session, "user", user_message)
         await self._auto_title(db, session, user_message)
+        await db.commit()
 
         tool_defs = tools
         if not tool_defs and tool_registry:
@@ -214,6 +215,7 @@ class ChatService:
                     content=result_content,
                     tool_call={"id": tc["id"], "name": tc["name"]},
                 )
+            await db.commit()
 
         elapsed = time.monotonic() - t_start
         logger.info(
@@ -221,4 +223,4 @@ class ChatService:
             session_id, round_num, total_tool_calls, elapsed,
         )
         yield StreamChunk(type="done")
-        await db.flush()
+        await db.commit()

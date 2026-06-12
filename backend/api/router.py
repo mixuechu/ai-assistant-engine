@@ -30,7 +30,7 @@ async def chat(
     if not session_id:
         session = await chat_service.create_session(db, user.id)
         session_id = session.id
-        await db.flush()
+        await db.commit()
 
     logger.info("chat request user=%s session=%s", user.id, session_id)
 

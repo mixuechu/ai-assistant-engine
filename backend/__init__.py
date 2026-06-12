@@ -19,7 +19,10 @@ async def create_assistant_app(
     if settings is None:
         settings = EngineSettings()
 
-    logging.getLogger("ai").setLevel(logging.INFO)
+    ai_logger = logging.getLogger("ai")
+    ai_logger.setLevel(logging.INFO)
+    if not ai_logger.handlers:
+        ai_logger.addHandler(logging.StreamHandler())
 
     init_database(settings.DATABASE_URL)
     await create_tables()

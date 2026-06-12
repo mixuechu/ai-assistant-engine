@@ -66,94 +66,105 @@ export function useChat({ config, sessionId, onSessionCreated }: UseChatOptions)
       const decoder = new TextDecoder()
       let buffer = ''
       let currentEvent = ''
+      let dataLines: string[] = []
+
+      const flushEvent = () => {
+        if (!currentEvent || dataLines.length === 0) return
+        const data = dataLines.join('\n')
+
+        if (currentEvent === 'session') {
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.session_id) {
+              onSessionCreated?.(parsed.session_id)
+            }
+          } catch { /* ignore */ }
+        } else if (currentEvent === 'text') {
+          setMessages(prev => {
+            const updated = [...prev]
+            const last = updated[updated.length - 1]
+            if (last && last.role === 'assistant' && last.isStreaming) {
+              updated[updated.length - 1] = {
+                ...last,
+                content: last.content + data,
+              }
+            }
+            return updated
+          })
+        } else if (currentEvent === 'tool_executing') {
+          try {
+            const parsed = JSON.parse(data)
+            const toolStatus: ToolStatus = { name: parsed.name || 'tool', status: 'executing' }
+            setMessages(prev => {
+              const updated = [...prev]
+              const last = updated[updated.length - 1]
+              if (last && last.role === 'assistant' && last.isStreaming) {
+                const statuses = [...(last.toolStatuses || []), toolStatus]
+                updated[updated.length - 1] = { ...last, toolStatuses: statuses }
+              }
+              return updated
+            })
+          } catch { /* ignore */ }
+        } else if (currentEvent === 'tool_result') {
+          try {
+            const parsed = JSON.parse(data)
+            setMessages(prev => {
+              const updated = [...prev]
+              const last = updated[updated.length - 1]
+              if (last && last.role === 'assistant' && last.isStreaming && last.toolStatuses) {
+                const statuses = last.toolStatuses.map(ts =>
+                  ts.name === (parsed.name || '') ? { ...ts, status: 'done' as const } : ts
+                )
+                updated[updated.length - 1] = { ...last, toolStatuses: statuses, content: '' }
+              }
+              return updated
+            })
+          } catch { /* ignore */ }
+        } else if (currentEvent === 'error') {
+          setMessages(prev => {
+            const updated = [...prev]
+            const last = updated[updated.length - 1]
+            if (last && last.isStreaming) {
+              updated[updated.length - 1] = {
+                ...last,
+                content: `Error: ${data}`,
+                isStreaming: false,
+              }
+            }
+            return updated
+          })
+        }
+
+        currentEvent = ''
+        dataLines = []
+      }
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(value, { stream: true }).replace(/\r/g, '')
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
         for (const line of lines) {
           if (line.startsWith('event: ')) {
+            flushEvent()
             currentEvent = line.slice(7).trim()
             continue
           }
 
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-
-            if (currentEvent === 'session') {
-              try {
-                const parsed = JSON.parse(data)
-                if (parsed.session_id) {
-                  onSessionCreated?.(parsed.session_id)
-                }
-              } catch { /* ignore */ }
-            } else if (currentEvent === 'text') {
-              setMessages(prev => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                if (last && last.role === 'assistant' && last.isStreaming) {
-                  updated[updated.length - 1] = {
-                    ...last,
-                    content: last.content + data,
-                  }
-                }
-                return updated
-              })
-            } else if (currentEvent === 'tool_executing') {
-              try {
-                const parsed = JSON.parse(data)
-                const toolStatus: ToolStatus = { name: parsed.name || 'tool', status: 'executing' }
-                setMessages(prev => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  if (last && last.role === 'assistant' && last.isStreaming) {
-                    const statuses = [...(last.toolStatuses || []), toolStatus]
-                    updated[updated.length - 1] = { ...last, toolStatuses: statuses }
-                  }
-                  return updated
-                })
-              } catch { /* ignore */ }
-            } else if (currentEvent === 'tool_result') {
-              try {
-                const parsed = JSON.parse(data)
-                setMessages(prev => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  if (last && last.role === 'assistant' && last.isStreaming && last.toolStatuses) {
-                    const statuses = last.toolStatuses.map(ts =>
-                      ts.name === (parsed.name || '') ? { ...ts, status: 'done' as const } : ts
-                    )
-                    updated[updated.length - 1] = { ...last, toolStatuses: statuses, content: '' }
-                  }
-                  return updated
-                })
-              } catch { /* ignore */ }
-            } else if (currentEvent === 'done') {
-              // stream complete
-            } else if (currentEvent === 'error') {
-              setMessages(prev => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                if (last && last.isStreaming) {
-                  updated[updated.length - 1] = {
-                    ...last,
-                    content: `Error: ${data}`,
-                    isStreaming: false,
-                  }
-                }
-                return updated
-              })
-            }
-
-            currentEvent = ''
+          if (line.startsWith('data:')) {
+            dataLines.push(line.startsWith('data: ') ? line.slice(6) : line.slice(5))
             continue
+          }
+
+          if (line.trim() === '') {
+            flushEvent()
           }
         }
       }
+      flushEvent()
 
       setMessages(prev => {
         const updated = [...prev]

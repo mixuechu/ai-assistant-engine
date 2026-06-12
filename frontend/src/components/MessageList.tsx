@@ -1,5 +1,15 @@
 import React, { useEffect, useRef } from 'react'
+import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { ChatMessage, ToolStatus } from '../types'
+
+function cleanCJKSpacing(text: string): string {
+  text = text.replace(/([一-鿿])\s+([一-鿿])/g, '$1$2')
+  text = text.replace(/([一-鿿])\s+([，。、！？：；）》」』】])/g, '$1$2')
+  text = text.replace(/\*\* +/g, '**')
+  text = text.replace(/ +\*\*/g, '**')
+  return text
+}
 
 interface MessageListProps {
   messages: ChatMessage[]
@@ -52,7 +62,24 @@ export const MessageList: React.FC<MessageListProps> = ({
             {msg.toolStatuses && msg.toolStatuses.length > 0 && (
               <ToolStatusIndicator statuses={msg.toolStatuses} />
             )}
-            {msg.content && <div className="ai-message-bubble">{msg.content}</div>}
+            {msg.content && (
+              <div className="ai-message-bubble">
+                {msg.role === 'assistant'
+                  ? <>
+                      <Markdown remarkPlugins={[remarkGfm]}>{cleanCJKSpacing(msg.content)}</Markdown>
+                      {msg.isStreaming && <span style={{
+                        display: 'inline-block',
+                        width: 6,
+                        height: 16,
+                        background: 'var(--ai-accent)',
+                        marginLeft: 2,
+                        verticalAlign: 'text-bottom',
+                        animation: 'ai-blink 1s infinite',
+                      }} />}
+                    </>
+                  : msg.content}
+              </div>
+            )}
           </div>
         ))}
       <div ref={endRef} />

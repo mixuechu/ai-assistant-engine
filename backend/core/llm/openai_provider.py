@@ -1,9 +1,13 @@
 import json
+import logging
 from typing import Any, AsyncGenerator, Optional
 
+import httpx
 from openai import AsyncOpenAI
 
 from .provider import LLMProvider, LLMResponse, Message, StreamChunk, ToolDefinition
+
+logger = logging.getLogger("ai.llm")
 
 
 class OpenAIProvider(LLMProvider):
@@ -15,7 +19,12 @@ class OpenAIProvider(LLMProvider):
         model: str = "gpt-4o",
         base_url: Optional[str] = None,
     ):
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=httpx.Timeout(connect=10, read=120, write=30, pool=30),
+            max_retries=2,
+        )
         self.model = model
 
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:

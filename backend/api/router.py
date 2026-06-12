@@ -35,46 +35,50 @@ async def chat(
     logger.info("chat request user=%s session=%s", user.id, session_id)
 
     async def event_generator():
-        yield {"event": "session", "data": json.dumps({"session_id": session_id})}
+        try:
+            yield {"event": "session", "data": json.dumps({"session_id": session_id})}
 
-        async for chunk in chat_service.chat_stream(
-            db=db,
-            session_id=session_id,
-            user_id=user.id,
-            user_message=req.message,
-            system_prompt=adapter.system_prompt,
-            tool_registry=tool_registry,
-        ):
-            if chunk.type == "text":
-                yield {"event": "text", "data": chunk.content}
-            elif chunk.type == "tool_call":
-                yield {
-                    "event": "tool_call",
-                    "data": json.dumps(chunk.tool_call, ensure_ascii=False),
-                }
-            elif chunk.type == "tool_executing":
-                yield {
-                    "event": "tool_executing",
-                    "data": json.dumps(
-                        {"name": chunk.content, "id": chunk.tool_call["id"] if chunk.tool_call else None},
-                        ensure_ascii=False,
-                    ),
-                }
-            elif chunk.type == "tool_result":
-                preview = chunk.content[:5000] if chunk.content else ""
-                yield {
-                    "event": "tool_result",
-                    "data": json.dumps(
-                        {"name": chunk.tool_call["name"] if chunk.tool_call else "",
-                         "id": chunk.tool_call["id"] if chunk.tool_call else "",
-                         "preview": preview},
-                        ensure_ascii=False,
-                    ),
-                }
-            elif chunk.type == "error":
-                yield {"event": "error", "data": chunk.content}
-            elif chunk.type == "done":
-                yield {"event": "done", "data": ""}
+            async for chunk in chat_service.chat_stream(
+                db=db,
+                session_id=session_id,
+                user_id=user.id,
+                user_message=req.message,
+                system_prompt=adapter.system_prompt,
+                tool_registry=tool_registry,
+            ):
+                if chunk.type == "text":
+                    yield {"event": "text", "data": chunk.content}
+                elif chunk.type == "tool_call":
+                    yield {
+                        "event": "tool_call",
+                        "data": json.dumps(chunk.tool_call, ensure_ascii=False),
+                    }
+                elif chunk.type == "tool_executing":
+                    yield {
+                        "event": "tool_executing",
+                        "data": json.dumps(
+                            {"name": chunk.content, "id": chunk.tool_call["id"] if chunk.tool_call else None},
+                            ensure_ascii=False,
+                        ),
+                    }
+                elif chunk.type == "tool_result":
+                    preview = chunk.content[:5000] if chunk.content else ""
+                    yield {
+                        "event": "tool_result",
+                        "data": json.dumps(
+                            {"name": chunk.tool_call["name"] if chunk.tool_call else "",
+                             "id": chunk.tool_call["id"] if chunk.tool_call else "",
+                             "preview": preview},
+                            ensure_ascii=False,
+                        ),
+                    }
+                elif chunk.type == "error":
+                    yield {"event": "error", "data": chunk.content}
+                elif chunk.type == "done":
+                    yield {"event": "done", "data": ""}
+        except Exception:
+            logger.exception("SSE stream error session=%s user=%s", session_id, user.id)
+            yield {"event": "error", "data": "服务内部错误，请稍后重试"}
 
     return EventSourceResponse(event_generator())
 
